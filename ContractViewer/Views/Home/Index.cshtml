@@ -160,6 +160,11 @@
                                 <i class="fas fa-search"></i> Search
                             </button>
                         </div>
+                        <div class="col-md-2">
+                            <a href="/Home/ExportToExcel?searchTerm=@searchTerm" class="btn btn-success w-100">
+                                <i class="fas fa-file-excel"></i> Export Excel
+                            </a>
+                        </div>
                     </form>
                     @if (!string.IsNullOrEmpty(searchTerm))
                     {

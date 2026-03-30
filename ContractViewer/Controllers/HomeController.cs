@@ -3,6 +3,8 @@ using System.Data;
 using ContractViewer.Models;
 using System.Text;
 using MySql.Data.MySqlClient;
+using System.IO;
+using OfficeOpenXml;
 
 namespace ContractViewer.Controllers
 {
@@ -267,6 +269,127 @@ namespace ContractViewer.Controllers
             }
 
             return contracts;
+        }
+
+        public IActionResult ExportToExcel(string searchTerm = "")
+        {
+            try
+            {
+                // Get all data (not paginated) for export
+                var contracts = string.IsNullOrWhiteSpace(searchTerm)
+                    ? GetContractsWithCurrency(0, int.MaxValue)
+                    : SearchContracts(searchTerm, 0, int.MaxValue);
+
+                // Set up EPPlus license context
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+                using (var package = new ExcelPackage())
+                {
+                    var worksheet = package.Workbook.Worksheets.Add("Contract Data");
+
+                    // Add headers
+                    var displayColumns = new List<string>
+                    {
+                        "s_n", "cycle", "seller", "client", "buyer", "annual_general_contract_number",
+                        "appendix_number", "mill", "product_type", "product", "land_sea", "terms_of_delivery",
+                        "type_of_transport_unit", "fsc", "destination", "r_station", "r_station_prov",
+                        "r_station_region", "volume", "percent_of_quantity", "price", "terms_of_payment",
+                        "prepayment_discount", "consignee", "date_of_signature", "last_shipping_date_in_contract",
+                        "deferred_last_shipping_date", "actual_deferred_shipping_volume", "planning_date_of_payment",
+                        "actual_date_of_payment", "delivery_date", "request_about_delivery_from_client", "status",
+                        "initiator", "comments", "frequency_of_extend", "reasons_for", "month", "forwarder",
+                        "container_terminal", "packaging", "dap_freight_cars_at_discount", "discount_for_dap_railcars",
+                        "twenty_percent_discount_hk", "city_dap_to_warehouse", "one_railway_bill_lading", "bonuses",
+                        "buyers_bank", "sellers_bank", "quantity_of_lc", "no_lc", "date_registered_in_sap"
+                    };
+
+                    // Add column headers
+                    for (int i = 0; i < displayColumns.Count; i++)
+                    {
+                        worksheet.Cells[1, i + 1].Value = GetDisplayName(displayColumns[i]);
+                        worksheet.Cells[1, i + 1].Style.Font.Bold = true;
+                        worksheet.Cells[1, i + 1].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                        worksheet.Cells[1, i + 1].Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightBlue);
+                    }
+
+                    // Add data rows
+                    for (int row = 0; row < contracts.Count; row++)
+                    {
+                        for (int col = 0; col < displayColumns.Count; col++)
+                        {
+                            var value = GetColumnValueForExport(contracts[row], displayColumns[col]);
+                            worksheet.Cells[row + 2, col + 1].Value = value;
+                        }
+                    }
+
+                    // Auto-fit columns
+                    worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+                    // Set response headers
+                    var stream = new MemoryStream();
+                    package.SaveAs(stream);
+                    stream.Position = 0;
+
+                    var fileName = $"Contract_Data_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                    return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                ViewBag.Error = $"Error exporting data: {ex.Message}";
+                return RedirectToAction("Index");
+            }
+        }
+
+        private string GetColumnValueForExport(Contract contract, string columnName)
+        {
+            return columnName.ToLower() switch
+            {
+                "id" => contract.Id.ToString(),
+                "s_n" => contract.S_N ?? "",
+                "cycle" => contract.Cycle ?? "",
+                "seller" => contract.Seller ?? "",
+                "client" => contract.Client ?? "",
+                "buyer" => contract.Buyer ?? "",
+                "annual_general_contract_number" => contract.AnnualGeneralContractNumber ?? "",
+                "appendix_number" => contract.AppendixNumber ?? "",
+                "mill" => contract.Mill ?? "",
+                "product_type" => contract.ProductType ?? "",
+                "product" => contract.Product ?? "",
+                "percent_of_quantity" => FormatPercentageForExport(contract.AdditionalColumns.ContainsKey("percent_of_quantity") ? contract.AdditionalColumns["percent_of_quantity"]?.ToString() : ""),
+                "terms_of_payment" => FormatTermsOfPaymentForExport(contract.AdditionalColumns.ContainsKey("terms_of_payment") ? contract.AdditionalColumns["terms_of_payment"]?.ToString() : ""),
+                _ => contract.AdditionalColumns.ContainsKey(columnName) ? contract.AdditionalColumns[columnName]?.ToString() ?? "" : ""
+            };
+        }
+
+        private string FormatPercentageForExport(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            if (decimal.TryParse(value, out decimal percentage))
+            {
+                return (percentage / 100).ToString("P1"); // Format as percentage (0.05 -> 5.0%)
+            }
+            return value;
+        }
+
+        private string FormatTermsOfPaymentForExport(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            if (value == "1")
+            {
+                return "100%";
+            }
+            return value;
+        }
+
+        private string GetDisplayName(string columnName)
+        {
+            // Convert snake_case to readable format
+            return System.Text.RegularExpressions.Regex.Replace(
+                columnName.Replace("_", " "),
+                "([a-z])([A-Z])",
+                "$1 $2"
+            ).ToUpper();
         }
     }
 }
