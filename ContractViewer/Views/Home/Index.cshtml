@@ -1,0 +1,431 @@
+@model ContractViewer.Models.ContractViewModel
+@{
+    ViewData["Title"] = "Appendix List";
+    var searchTerm = ViewBag.SearchTerm as string;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        .table-container {
+            overflow-x: auto;
+            overflow-y: auto;
+            white-space: nowrap;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            /* Fixed height to ensure horizontal scrollbar is always visible */
+            height: 70vh; /* Use viewport height for responsive sizing */
+            min-height: 400px;
+            /* Ensure horizontal scrollbar is always visible */
+            scrollbar-width: thin;
+            scrollbar-color: #007bff #f1f1f1;
+        }
+
+        /* Custom scrollbar styling for webkit browsers */
+        .table-container::-webkit-scrollbar {
+            height: 12px;
+            width: 12px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 6px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            border-radius: 6px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+        }
+
+        .table-fixed-header {
+            background-color: #f8f9fa;
+        }
+
+        .table th {
+            background-color: #f8f9fa;
+            min-width: 150px;
+            border-bottom: 2px solid #dee2e6;
+            position: relative;
+            z-index: 10;
+        }
+
+        .table td {
+            min-width: 150px;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .table td:hover {
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: none;
+        }
+
+        .search-container {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .record-info {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .error-message {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .column-count {
+            background-color: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mt-4">
+                    <i class="fas fa-file-contract"></i>
+                    Appendix List
+                    <span class="column-count">@Model.ColumnNames.Count columns</span>
+                </h1>
+
+                @if (ViewBag.Error != null)
+                {
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        @ViewBag.Error
+                    </div>
+                }
+
+                <!-- Search Form -->
+                <div class="search-container">
+                    <form method="post" action="/Home/Search" class="row g-3">
+                        <div class="col-md-8">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-search"></i>
+                                </span>
+                                <input type="text" class="form-control" name="searchTerm" value="@searchTerm"
+                                       placeholder="Search across all columns..." />
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" name="pageSize">
+                                <option value="25" selected="@(Model.PageSize == 25 ? "selected" : null)">25 per page</option>
+                                <option value="50" selected="@(Model.PageSize == 50 ? "selected" : null)">50 per page</option>
+                                <option value="100" selected="@(Model.PageSize == 100 ? "selected" : null)">100 per page</option>
+                                <option value="200" selected="@(Model.PageSize == 200 ? "selected" : null)">200 per page</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                    </form>
+                    @if (!string.IsNullOrEmpty(searchTerm))
+                    {
+                        <div class="mt-2">
+                            <a href="/Home/Index" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-times"></i> Clear Search
+                            </a>
+                        </div>
+                    }
+                </div>
+
+                <!-- Table Container -->
+                <div class="table-container">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-fixed-header">
+                            <tr>
+                                <th style="min-width: 60px;">#</th>
+                                @foreach (var columnName in GetDisplayColumns())
+                                {
+                                    <th title="@columnName" style="min-width: 120px;">
+                                        @GetDisplayName(columnName)
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < Model.Contracts.Count; i++)
+                            {
+                                var contract = Model.Contracts[i];
+                                var rowNumber = (Model.CurrentPage - 1) * Model.PageSize + i + 1;
+
+                                <tr>
+                                    <td><strong>@rowNumber</strong></td>
+                                    @foreach (var columnName in GetDisplayColumns())
+                                    {
+                                        <td title="@GetColumnValue(contract, columnName)" style="min-width: 120px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                                            @GetColumnValue(contract, columnName)
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Loading indicator -->
+                <div class="loading" id="loadingIndicator">
+                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination-container">
+                    <div class="record-info">
+                        Showing @(((Model.CurrentPage - 1) * Model.PageSize) + 1) to @Math.Min(Model.CurrentPage * Model.PageSize, Model.TotalRecords) of @Model.TotalRecords records
+                        @if (!string.IsNullOrEmpty(searchTerm))
+                        {
+                            <span> (filtered by "@searchTerm")</span>
+                        }
+                    </div>
+
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination">
+                            @if (Model.CurrentPage > 1)
+                            {
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=@(Model.CurrentPage - 1)&pageSize=@Model.PageSize&searchTerm=@searchTerm">
+                                        <i class="fas fa-chevron-left"></i> Previous
+                                    </a>
+                                </li>
+                            }
+
+                            @for (int i = Math.Max(1, Model.CurrentPage - 2); i <= Math.Min(Model.TotalPages, Model.CurrentPage + 2); i++)
+                            {
+                                <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                    <a class="page-link" href="?page=@i&pageSize=@Model.PageSize&searchTerm=@searchTerm">@i</a>
+                                </li>
+                            }
+
+                            @if (Model.CurrentPage < Model.TotalPages)
+                            {
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=@(Model.CurrentPage + 1)&pageSize=@Model.PageSize&searchTerm=@searchTerm">
+                                        Next <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Add row highlighting on click with proper styling
+        document.addEventListener('DOMContentLoaded', function () {
+            const rows = document.querySelectorAll('tbody tr');
+            let selectedRow = null;
+
+            rows.forEach(row => {
+                // Add pointer cursor
+                row.style.cursor = 'pointer';
+
+                // Store original background color
+                const originalBgColor = row.style.backgroundColor || getComputedStyle(row).backgroundColor;
+
+                // Hover effect for unselected rows
+                row.addEventListener('mouseenter', function () {
+                    if (selectedRow !== this) {
+                        this.style.backgroundColor = '#e3f2fd';
+                    }
+                });
+
+                row.addEventListener('mouseleave', function () {
+                    if (selectedRow !== this) {
+                        // Restore original background (accounting for striped table)
+                        const rowIndex = Array.from(this.parentNode.children).indexOf(this);
+                        this.style.backgroundColor = (rowIndex % 2 === 0) ? '#ffffff' : '#f8f9fa';
+                    }
+                });
+
+                // Click to select row
+                row.addEventListener('click', function () {
+                    // Remove highlight from previously selected row
+                    if (selectedRow) {
+                        const prevRowIndex = Array.from(selectedRow.parentNode.children).indexOf(selectedRow);
+                        selectedRow.style.backgroundColor = (prevRowIndex % 2 === 0) ? '#ffffff' : '#f8f9fa';
+                        selectedRow.style.color = '';
+                    }
+
+                    // Add highlight to clicked row
+                    this.style.backgroundColor = '#007bff';
+                    this.style.color = 'white';
+
+                    // Update selected row reference
+                    selectedRow = this;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+
+@functions {
+    public string GetDisplayName(string columnName)
+    {
+        // Convert snake_case or camelCase to readable format
+        return System.Text.RegularExpressions.Regex.Replace(
+            columnName.Replace("_", " "),
+            "([a-z])([A-Z])",
+            "$1 $2"
+        ).ToUpper();
+    }
+
+    public List<string> GetDisplayColumns()
+    {
+        // Define the specific column order for display
+        // This excludes internal columns like seller_id, currency_id
+        // and puts seller after cycle as requested
+        return new List<string>
+        {
+            "s_n",
+            "cycle",
+            "seller",  // Placed after cycle as requested
+            "client",
+            "buyer",
+            "annual_general_contract_number",
+            "appendix_number",
+            "mill",
+            "product_type",
+            "product",
+            "land_sea",
+            "terms_of_delivery",
+            "type_of_transport_unit",
+            "fsc",
+            "destination",
+            "r_station",
+            "r_station_prov",
+            "r_station_region",
+            "volume",
+            "percent_of_quantity",
+            "price",
+            "terms_of_payment",
+            "prepayment_discount",
+            "consignee",
+            "date_of_signature",
+            "last_shipping_date_in_contract",
+            "deferred_last_shipping_date",
+            "actual_deferred_shipping_volume",
+            "planning_date_of_payment",
+            "actual_date_of_payment",
+            "delivery_date",
+            "request_about_delivery_from_client",
+            "status",
+            "initiator",
+            "comments",
+            "frequency_of_extend",
+            "reasons_for",
+            "month",
+            "forwarder",
+            "container_terminal",
+            "packaging",
+            "dap_freight_cars_at_discount",
+            "discount_for_dap_railcars",
+            "twenty_percent_discount_hk",
+            "city_dap_to_warehouse",
+            "one_railway_bill_lading",
+            "bonuses",
+            "buyers_bank",
+            "sellers_bank",
+            "quantity_of_lc",
+            "no_lc",
+            "date_registered_in_sap"
+        };
+    }
+
+    public string GetColumnValue(ContractViewer.Models.Contract contract, string columnName)
+    {
+        return columnName.ToLower() switch
+        {
+            "id" => contract.Id.ToString(),
+            "s_n" => contract.S_N ?? "",
+            "cycle" => contract.Cycle ?? "",
+            "seller" => contract.Seller ?? "",
+            "client" => contract.Client ?? "",
+            "buyer" => contract.Buyer ?? "",
+            "annual_general_contract_number" => contract.AnnualGeneralContractNumber ?? "",
+            "appendix_number" => contract.AppendixNumber ?? "",
+            "mill" => contract.Mill ?? "",
+            "product_type" => contract.ProductType ?? "",
+            "product" => contract.Product ?? "",
+            "percent_of_quantity" => FormatPercentage(contract.AdditionalColumns.ContainsKey("percent_of_quantity") ? contract.AdditionalColumns["percent_of_quantity"]?.ToString() : ""),
+            "terms_of_payment" => FormatTermsOfPayment(contract.AdditionalColumns.ContainsKey("terms_of_payment") ? contract.AdditionalColumns["terms_of_payment"]?.ToString() : ""),
+            // Note: currency column is no longer in the table, price formatting is handled in the controller
+            _ => contract.AdditionalColumns.ContainsKey(columnName) ? contract.AdditionalColumns[columnName]?.ToString() ?? "" : ""
+        };
+    }
+
+    public string FormatPercentage(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value == "NULL")
+            return "";
+
+        if (double.TryParse(value, out double decimalValue))
+        {
+            // Convert decimal to percentage (0.05 -> 5%)
+            double percentage = decimalValue * 100;
+            return $"{percentage:N0}%";
+        }
+
+        return value; // Return original value if parsing fails
+    }
+
+    public string FormatTermsOfPayment(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value == "NULL")
+            return "";
+
+        // If value is exactly "1", display as "100%"
+        if (value == "1" || value == "1.00" || value == "1.0")
+        {
+            return "100%";
+        }
+
+        // For all other values, return as-is (no formatting)
+        return value;
+    }
+}
